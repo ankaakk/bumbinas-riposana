@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import matplotlib.patches as patches
@@ -16,12 +17,13 @@ g = 9.81                                         # m/s^2
 mukin  = 0.3                                     # dimensionless; coefficient of kinetic friction
 mustat = 0.4                                     # dimensionless; coefficient of static friction
 xlim, ylim = 100, 100                            # m, siulation box size
+r_particle = 2                                   # m, particle radius
 
 
 def get_surface(func):
     global xlim                                  # use constants defined at the top
     
-    Npts = 101                                   # number of points
+    Npts = 1001                                   # number of points
     x = np.linspace(0.0, xlim, Npts)
     y = func(x)
     dydx = np.gradient(y, x)
@@ -80,13 +82,15 @@ def friction(vx, angle, normal_mod):
 
 
 def Derivatives(state, t):
-    global g
+    global g, r_particle
     
     x  = state[0]
     y  = state[1]
     vx = state[2]
     vy = state[3]
     v = np.linalg.norm([vx, vy])
+    phi = state[4]                      # rotation angle
+    phidot = state[5]                   # rotation velocity
 
     ''' get angle and radius from the surface array, corresponding to the largest x in surface that is <= x in this calculation '''
     index = np.max(np.where(surface[:,0]<=x))
@@ -104,9 +108,16 @@ def Derivatives(state, t):
     
     accel = gravitya + normala + frictiona
 
+    # phidot = v / r_particle * (-np.sign(vx))                                        # rotational velocity
+    ''' moment of inertia of a solid sphere: 2/5 * m * R**2
+    rot. acceleration = torque / mom. of in. = force * R / mom. of in. = m*a * R / (2/5 * m * R**2)'''
+    phiddot = 5 * friction_mod / 2 / r_particle     * (np.sign(vx))                # cancelled mass and radius
 
-    statedot = np.asarray([vx, vy, accel[0], accel[1]])
+    statedot = np.asarray([vx, vy, accel[0], accel[1], phidot, phiddot])            
     return statedot
+
+
+
 
 
 ### CALCULATIONS
@@ -116,17 +127,27 @@ theta0 = np.arctan((surface[1,1]-surface[0,1])/(surface[1,0]-surface[0,0]))
 H = max(surface[:,1]-min(surface[:,1]))
 T = np.sqrt(2*H/(g*(1-np.cos(theta0)**2)))
 
-ntimes = 200                                                                        # number of time points
-tmax = 15.0                                                                         # seconds
+ntimes = 100                                                                        # amount of time points
+tmax = 5.0                                                                          # seconds
 tout = np.linspace(0, tmax, ntimes)         
-dt = tmax/ntimes            
-stateinitial = np.asarray([surface[0,0], surface[0,1], 0.0, 0.0])                   # x, y, vx, vy
-stateout = sci.odeint(Derivatives, y0=stateinitial, t=tout)                         # numerical integration here
+dt = tmax/ntimes          
+angle_init = surface[0,4]  
+stateinitial = np.asarray([surface[0,0]-r_particle*np.sin(angle_init),              # 0, x
+                            surface[0,1]+r_particle*np.cos(angle_init),             # 1, y
+                            0.0,                                                    # 2, vx
+                            0.0,                                                    # 3, vy
+                            0.0,                                                    # 4, phidot
+                            0.0,                                                    # 5, phiddot
+                            ])                   # x, y, vx, vy
+stateout = sci.odeint(Derivatives, y0=stateinitial, t=tout, full_output=0)                         # numerical integration here
+
+
+
 
 
 ### PLOTTING            
 
-fig = plt.figure()          
+fig = plt.figure(figsize=(7,7))          
 ax = fig.add_axes([0, 0, 1, 1])                                                     # fill the whole figure with ax
 ax.set_axis_off()                                      
 fig.set_facecolor('black')                                                          # facecolor = background color
@@ -134,6 +155,7 @@ ax.set_facecolor('black')
 
 ax.set_xlim([-1,xlim])
 ax.set_ylim([-1,ylim])
+ax.set_aspect('equal')
 # ax.plot(surface[:,0], surface[:,1] ,c='w')                                        # a line for surface
 poly = patches.Polygon(((0,0), *zip(surface[:,0], surface[:,1]), (xlim, 0)),    
                        color='#d3d3d3')#, edgecolor='#FFFFFF', lw=3)              # a polygon for surface  
@@ -146,17 +168,38 @@ time_text = ax.text(0.03, 0.15, '', transform=ax.transAxes)
 vel_text  = ax.text(0.03, 0.10, '', transform=ax.transAxes)
 disp_text = ax.text(0.03, 0.05, '', transform=ax.transAxes)
 
-scat = ax.scatter(stateinitial[0], stateinitial[1], s=150, c='#e5383b')           # the sliding particle
+# scat = ax.scatter(stateinitial[0], stateinitial[1], s=150, c='#e5383b')           # the sliding particle
+image = plt.imread('double-spiral.png')
+
+cx, cy = stateinitial[0], stateinitial[1]
+extent = [cx - r_particle, cx + r_particle, cy - r_particle, cy + r_particle]
+circ = patches.Circle((cx, cy), radius=r_particle, facecolor='#e5383b')
+ax.add_patch(circ)
+im = ax.imshow(image, extent=extent, origin='lower', zorder=2)
+im.set_clip_path(circ)
+
+
+
 
 
 ### ANIMATION
 
 def animate(i):
-    scat.set_offsets((stateout[i,0],stateout[i,1]))                                 # move the particle
+    # scat.set_offsets((stateout[i,0],stateout[i,1]))                                 # move the particle
+
+    cx, cy = (stateout[i,0],stateout[i,1])
+    circ.set_center((cx, cy))
+    extent = [cx - r_particle, cx + r_particle, cy - r_particle, cy + r_particle]
+    transform = mpl.transforms.Affine2D().rotate_around(cx, cy, stateout[i,4]) + ax.transData
+    im.set_extent(extent)
+    im.set_transform(transform)
+    im.set_clip_path(circ)
+    
     time_text.set_text(time_template % (tout[i]))                                   # clock in the figure
     vel_text.set_text(vel_template % (np.sqrt(stateout[i,2]**2 + stateout[i,3]**2)*np.sign(stateout[i,2])))
     disp_text.set_text(disp_template % np.sqrt((stateout[i,0]-stateout[0,0])**2 + (stateout[i,1]-stateout[0,1])**2))
-    return (scat,)
+    
+    return (im)
 
 
 ani = animation.FuncAnimation(fig, animate, repeat=True, frames=ntimes)#, interval=300)
@@ -171,12 +214,11 @@ print("--- %s seconds ---" % (time.time() - start_time))
 
 '''
 to do:
+!!! consider contact point or CM position for calulations in Derivatives(), not only in stateinitial
+create a GUI (Graphical User Interface) for user to input coefficients and funtion parameters
 make a safer vx==0 in friction()
-add a physical radius for the particle
-visualize the particle with a patch with texture to see the rolling
 check if the input surface func is inside the simulation box
 raise exception (?) if the surface is going uphill from the start
 stop the simulation when the particle reaches xlim
 check if particle is in contact with the surface
-add rolling
 '''
