@@ -5,6 +5,8 @@ import matplotlib.animation as animation
 import matplotlib.patches as patches
 import scipy.integrate as sci
 import time
+from tkinter import *
+from tkinter import messagebox
 start_time = time.time()
 
 
@@ -14,10 +16,73 @@ func = lambda x: 0.025*(x-50)**2+5               # equation of surface
 ### CONSTANTS
 g = 9.81                                         # m/s^2
 ''' mukin must be smaller than mustat '''
-mukin  = 0.3                                     # dimensionless; coefficient of kinetic friction
-mustat = 0.4                                     # dimensionless; coefficient of static friction
-xlim, ylim = 100, 100                            # m, siulation box size
-r_particle = 2                                   # m, particle radius
+
+### GUI
+#main window
+master = Tk()
+master.title('User input') 
+master.geometry('400x300') #size
+
+#labels for inpit
+Label(master, text='Static ').grid(row=1) 
+Label(master, text='Kinetic ').grid(row=2)
+Label(master, text='xlim').grid(row=3)
+Label(master, text='ylim ').grid(row=4)
+Label(master, text='Radius ').grid(row=5)
+
+#entry boxes
+mu_static = Entry(master) 
+mu_kinetic = Entry(master)
+xlimit = Entry(master)
+ylimit = Entry(master)
+radius = Entry(master)
+
+#place entry boxes next to inputs
+mu_static.grid(row=1, column=1) 
+mu_kinetic.grid(row=2, column=1)
+xlimit.grid(row=3, column=1)
+ylimit.grid(row=4, column=1)
+radius.grid(row=5, column=1)
+
+def save_changes():
+    '''
+    reads inputs from entry boxes, checks if all values have been
+    input, converts to float, closes window
+    '''
+    global mustat, mukin, xlim, ylim, r_particle
+
+    mustat = mu_static.get()
+    mukin = mu_kinetic.get()
+    xlim = xlimit.get()
+    ylim = ylimit.get()
+    r_particle = radius.get()
+
+
+    if not mukin or not mustat or not xlim or not ylim or not r_particle:
+        messagebox.showerror('Error','Need all values') 
+        return
+    else:
+        messagebox.showinfo('Saved', 'Values saved') 
+    mustat = float(mustat) 
+    mukin = float(mukin)
+    xlim = float(xlim)
+    ylim = float(ylim)
+    r_particle = float(r_particle)
+
+    master.destroy() 
+
+def confirm_exit():
+    '''
+    asks for exit comfirmation
+    '''
+    response = messagebox.askyesnocancel('Confrim choices') 
+    if response:
+        save_changes()        
+
+confirm_button = Button(master, text='Confirm', command=confirm_exit) 
+confirm_button.grid(row=6,column=1)
+
+mainloop()  #infinite loop, keeps window open
 
 
 def get_surface(func):
@@ -206,16 +271,18 @@ ani = animation.FuncAnimation(fig, animate, repeat=True, frames=ntimes)#, interv
 writer = animation.PillowWriter(fps=1/dt,                                           # 1s of gif = 1s of model
                                 metadata=dict(artist='Me'),
                                 bitrate=1800)
-ani.save('animation.gif', writer=writer)
+ani.save('animation69.gif', writer=writer)
 
 
 print("--- %s seconds ---" % (time.time() - start_time))
 
 
+
+
 '''
 to do:
 !!! consider contact point or CM position for calulations in Derivatives(), not only in stateinitial
-create a GUI (Graphical User Interface) for user to input coefficients and funtion parameters
+GUI inputs need validation, it also needs to look nicer 
 make a safer vx==0 in friction()
 check if the input surface func is inside the simulation box
 raise exception (?) if the surface is going uphill from the start
