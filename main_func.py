@@ -133,7 +133,7 @@ def solve(func, do_animation=False, do_plots=True, tmax=20, fps=100, mukin=0.2, 
         dfriction_mod = sigmoid(*prepare_friction(angle, normal_mod), v=vslipabs)
         dfriction_signed = dfriction_mod * -vslipdir
 
-        rfriction_mod = sigmoid(f0=normal_mod*crf/np.sqrt(1-crf**2), f1=0.0, v=vslipabs)
+        rfriction_mod = sigmoid(f0=normal_mod*crf, f1=0.0, v=vslipabs)
         rfriction_signed = rfriction_mod * -vslipdir
         
         # friction_mod = dfriction_mod + rfriction_mod
@@ -144,11 +144,11 @@ def solve(func, do_animation=False, do_plots=True, tmax=20, fps=100, mukin=0.2, 
 
 
         phiddot = (dfriction_signed) / (icoef*r_particle)               # positive counterclockwise
-        phiddot += (rfriction_signed) / (icoef*r_particle*np.sqrt(1-crf**2))               # positive counterclockwise
+        phiddot += (rfriction_signed) / (icoef*r_particle)               # positive counterclockwise
         phiddot += (normal_mod*b) / (icoef * r_particle**2) * (-np.sign(phidot))
 
 
-        dworkdot = dfriction_mod * vslipabs
+        dworkdot = (dfriction_mod+rfriction_mod) * vslipabs
         rworkdot = normal_mod * b * np.abs(phidot)
 
 
@@ -255,12 +255,23 @@ def solve(func, do_animation=False, do_plots=True, tmax=20, fps=100, mukin=0.2, 
 
             return (circ)
 
+        index_arr = np.where(stateout.y[0]>=xlim)[0]        # unpack function output
+        if not len(index_arr)==0:                           # if leaves the box
+            index = index_arr[0]                            # first point outside the box
+            tmax = stateout.t[index]
+            sol_t = stateout.t[:index]
+            sol_y = stateout.y[:,:index]
+            energy_red = energy[:index]
+        else:                                               # if stays within the box, no changes
+            sol_t = stateout.t
+            sol_y = stateout.y
+            energy_red = energy
 
         fps_ani = 20                        # originally stateout has a larger fps, no need to fraw that much
         n_ani = int(fps/fps_ani)
-        sol_t_ani = stateout.t[::n_ani]     # for example, take every fifth point from solution
-        sol_y_ani = stateout.y[:, ::n_ani]
-        energy_ani = energy[::n_ani]
+        sol_t_ani = sol_t[::n_ani]          # for example, take every fifth point from solution
+        sol_y_ani = sol_y[:, ::n_ani]
+        energy_ani = energy_red[::n_ani]
 
         fig = plt.figure(figsize=(7,7))          
         ax = fig.add_axes([0, 0, 1, 1])                                                     # fill the whole figure with ax
@@ -296,7 +307,7 @@ def solve(func, do_animation=False, do_plots=True, tmax=20, fps=100, mukin=0.2, 
         im = ax.imshow(image, extent=extent, origin='lower', zorder=2)
         im.set_clip_path(circ)
 
-        ani = animation.FuncAnimation(fig, animate, repeat=True, frames=fps_ani*tmax)
+        ani = animation.FuncAnimation(fig, animate, repeat=True, frames=int(fps_ani*tmax))
         writer = animation.PillowWriter(fps=fps_ani,                                           # 1s of gif = 1s of model
                                         metadata=dict(artist='Me'),
                                         bitrate=1800)
